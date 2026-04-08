@@ -1,5 +1,5 @@
 from Cordic import Cordic
-from math import pi
+from math import pi, abs
 class Cordic2:
 
     stage_1_rotations = [0, 2**14, 2**15]
@@ -60,25 +60,16 @@ class Cordic2:
     def friend_angles_bit_accurate(self):
         # kernel rotation select
         goal_max_magnitude = int(10.305 * (2**15 / 180))
-        angle_negative = self.z < 0
-        if angle_negative:
-            if self.z < -self.stage_2_rotations[2]:
-                rotation_idx = 2
-            elif self.z < -(self.stage_2_rotations[1] + goal_max_magnitude):
-                rotation_idx = 2
-            elif self.z < -self.stage_2_rotations[1]:
-                rotation_idx = 1
-            else:
-                rotation_idx = 0
+        abs_z = abs(self.z)
+        
+        if abs_z <= goal_max_magnitude:
+            rotation_idx = 0
+        elif abs_z <= self.stage_2_rotations[1] + goal_max_magnitude
+            rotation_idx = 1
         else:
-            if self.z > self.stage_2_rotations[2]:
-                rotation_idx = 2
-            elif self.z > self.stage_2_rotations[1] + goal_max_magnitude:
-                rotation_idx = 2
-            elif self.z > self.stage_2_rotations[1]:
-                rotation_idx = 1
-            else:
-                rotation_idx = 0
+            rotation_idx = 2
+        
+        angle_negative = self.z < 0
         X_sum = self.x << 1
         if rotation_idx != 0:
             if not angle_negative:
@@ -90,12 +81,17 @@ class Cordic2:
                 X_sum -= self.x
             else:
                 X_sum += self.x
-        if rotation_idx == 1:
-            X_sum == X_sum << 2
-        else:
-            X_sum == X_sum << 3
-
         
+        if rotation_idx == 1:
+            X_sum = X_sum << 2
+        else:
+            X_sum = X_sum << 3
+
+        # left shift either by 2 or 5 branch
+        if rotation_idx == 1:
+            tmp_x_sum = (self.x << 5) + self.y
+        elif rotation_idx == 2:
+            tmp_x_sum = (self.x << 2) + self.y
         
         Y_sum = self.y << 4
         if rotation_idx != 0:
@@ -109,13 +105,30 @@ class Cordic2:
             else:
                 Y_sum += self.y << 3
         
+        if rotation_idx == 2:
+            Y_sum += tmp_x_sum << 2
+        elif rotation_idx == 0:
+            Y_sum += self.y
+        else: # index 1
+            Y_sum += X_sum
 
-        if rotation_idx == 1:
-            X_sum += self.x << 5 + self.y
+        if not angle_negative:
+            if rotation_idx != 0:
+                X_sum = tmp_x_sum - X_sum
+            else:
+                X_sum = -X_sum + self.x
+        else:
+            if rotation_idx != 0:
+                X_sum = tmp_x_sum + X_sum
+            else:
+                X_sum = X_sum + self.x
         
-            
-
-
+        self.x = X_sum
+        self.y = Y_sum
+        if angle_negative:
+            self.z += self.stage_2_rotations[rotation_idx]
+        else:
+            self.z -= self.stage_2_rotations[rotation_idx]
 
         # select rotation angle and sign based on input angle
         # implementation of the friend angle stage with modelling real hardware behaviour
