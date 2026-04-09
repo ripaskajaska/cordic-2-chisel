@@ -18,10 +18,19 @@ class Cordic2:
         self.z: int = z
         self.quadrant = 0
 
-    def cordic(self):
-        pass
+    def cordic(self, angle_indx = 0):
+        if angle_indx == 0:
+            angle = int(1.790 * (2**15 / 180))
+        else:
+            angle = int(0.895 * (2**15 / 180))
+        # We run two iterations of traditional CORDIC in the same function
+        # stage 4:
+        input_angle_negative = self.z < 0
+
         # select rotation angle and sign based on input angle
-        
+    
+    
+
     def trivial_rotations(self):
 
         # trivial rotations to reduce the input angle to [-45, 45[
@@ -58,26 +67,59 @@ class Cordic2:
         self.z = int(self.z * (2**15 / 180))
 
     def friend_angles_bit_accurate(self):
+        # We wish to implement operations for x and y that result to the desired C +jS operation on a complex number but with hardware semantics.
+        # Our options are:
+        # P_0 = 25 + j0
+        # P_1 = 24 + j7
+        # P_2 = 20 + j15
+
         # kernel rotation select
         goal_max_magnitude = int(10.305 * (2**15 / 180))
         abs_z = abs(self.z)
         
         if abs_z <= goal_max_magnitude:
             rotation_idx = 0
-        elif abs_z <= self.stage_2_rotations[1] + goal_max_magnitude
+        elif abs_z <= self.stage_2_rotations[1] + goal_max_magnitude:
             rotation_idx = 1
         else:
             rotation_idx = 2
         
-        angle_negative = self.z < 0
+        input_angle_negative = self.z < 0
+
+        # Let's compute Cx, Sy, Sx, Cy with hardware semantics. 
+        if rotation_idx == 0: # P_0 = 25 + j0
+            Cx = (self.x << 4) + (self.x << 3) + self.x # 25x = 16x + 8x + x
+            Cy = (self.y << 4) + (self.y << 3) + self.y # 25y = 16y + 8y + y
+            Sx = 0
+            Sy = 0
+        elif rotation_idx == 1: # P_1 = 24 + j7
+            Cx = (self.x << 4) + (self.x << 3) # 24x = 16x + 8x
+            Cy = (self.y << 4) + (self.y << 3) # 24y = 16y + 8y
+            Sx = (self.x << 2) + (self.x << 1) + self.x # 7x = 4x + 2x + x
+            Sy = (self.y << 2) + (self.y << 1) + self.y # 7y = 4y + 2y + y
+        else: # P_2 = 20 + j15
+            Cx = (self.x << 4) + (self.x << 2) # 20x = 16x + 4x
+            Cy = (self.y << 4) + (self.y << 2) # 20y = 16y + 4y
+            Sx = (self.x << 4) + (self.x << 2) + (self.x << 1) + self.x # 15x = 16x - x = 16x - 1x
+            Sy = (self.y << 4) + (self.y << 2) + (self.y << 1) + self.y # 15y = 16y - y = 16y - 1y
+
+        if not input_angle_negative: # rotate counterclockwise
+            self.x = Cx + Sy
+            self.y = Cy - Sx
+            self.z += self.stage_2_rotations[rotation_idx]
+        else: # rotate clockwise
+            self.x = Cx - Sy
+            self.y = Cy + Sx
+            self.z -= self.stage_2_rotations[rotation_idx]
+        """
         X_sum = self.x << 1
         if rotation_idx != 0:
-            if not angle_negative:
+            if not input_angle_negative:
                 X_sum -= self.y << 1
             else:
                 X_sum += self.y << 1
         else:
-            if not angle_negative:
+            if not input_angle_negative:
                 X_sum -= self.x
             else:
                 X_sum += self.x
@@ -95,12 +137,12 @@ class Cordic2:
         
         Y_sum = self.y << 4
         if rotation_idx != 0:
-            if not angle_negative:
+            if not input_angle_negative:
                 Y_sum -= self.x
             else:
                 Y_sum += self.x
         else: # rotation_idx == 0
-            if not angle_negative:
+            if not input_angle_negative:
                 Y_sum -= self.y << 3
             else:
                 Y_sum += self.y << 3
@@ -112,7 +154,7 @@ class Cordic2:
         else: # index 1
             Y_sum += X_sum
 
-        if not angle_negative:
+        if not input_angle_negative:
             if rotation_idx != 0:
                 X_sum = tmp_x_sum - X_sum
             else:
@@ -125,17 +167,28 @@ class Cordic2:
         
         self.x = X_sum
         self.y = Y_sum
-        if angle_negative:
+        if input_angle_negative:
             self.z += self.stage_2_rotations[rotation_idx]
         else:
             self.z -= self.stage_2_rotations[rotation_idx]
 
         # select rotation angle and sign based on input angle
         # implementation of the friend angle stage with modelling real hardware behaviour
-
+        """
     def usr_cordic(self):
         # select rotation angle and sign based on input angle
-        pass
+        goal_max_magnitude = int(3.563 * (2**15 / 180))
+        abs_z = abs(self.z)
+        
+        if abs_z <= goal_max_magnitude:
+            rotation_idx = 0
+        else:
+            rotation_idx = 1
+        input_angle_negative = self.z < 0
+
+
+
+        
 
     def nano_rotations(self):
         # select rotation angle and sign based on input angle
