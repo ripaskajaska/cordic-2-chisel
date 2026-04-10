@@ -1,8 +1,8 @@
-import random
 
+from testbench import *
+FIXED_POINT_BITS = 16
 def main():
-    integer = get_random_integer(-2**16, 2**16 - 1)
+    random_test(FIXED_POINT_BITS)
 
-def get_random_integer(min_value: int, max_value: int) -> int:
-    return random.randint(min_value, max_value)
-
+if __name__ == "__main__":
+    main()

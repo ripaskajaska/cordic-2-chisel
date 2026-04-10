@@ -1,35 +1,67 @@
-from Cordic import Cordic
-from math import pi, abs
+
 class Cordic2:
 
     stage_1_rotations = [0, 2**14, 2**15]
-    stage_2_rotations = [0, int(16.260 * (2**15 / 180)), 36.870 * (2**15 / 180)]
+    stage_2_rotations = [0, int(16.260 * (2**15 / 180)), int(36.870 * (2**15 / 180))]
     stage_3_rotations = [0, int(7.125 * (2**15 / 180))]
     stage_4_rotation = int(1.790 * (2**15 / 180))
     stage_5_rotation = int(0.895 * (2**15 / 180))
-    stage_6_rotations = [ i * int(0.112 * (2**15 / 180)) for i in range (0, 8) ]
+    stage_6_rotations = [ i * int(0.112 * (2**15 / 180)) for i in range(0, 9) ]
     stage_6_bis_rotation = int(0.448 * (2**15 / 180))
-    stage_7_bis_rotations = [ i * int(0.056 * (2**15 / 180)) for i in range (0, 8) ]
+    stage_7_bis_rotations = [ i * int(0.056 * (2**15 / 180)) for i in range(0, 9) ]
     # Cordic 2 performs single iteration of each of its stage.
-    def __init__(self, x: int, y: int, z: int):
-        
+    def __init__(self, x: int, y: int, angle: float | int, input_type: int = 0):
+        # input type 0 corresponds to angle in degrees and x, y in fixed-point representation
+        self.input_angle: float = angle
         self.x: int = x
         self.y: int = y
-        self.z: int = z
-        self.quadrant = 0
+        self.z: int = 0
+        if input_type == 0:
+            self.normalize_and_convert_angle()
+        else:
+            self.z = angle
+
+    def get_result(self):
+        return self.x, self.y, self.z
 
     def cordic(self, angle_indx = 0):
         if angle_indx == 0:
             angle = int(1.790 * (2**15 / 180))
+
         else:
             angle = int(0.895 * (2**15 / 180))
+
         # We run two iterations of traditional CORDIC in the same function
         # stage 4:
+        # Cordidic rotations:
+        # On index 0: 32 + j
+        # On index 1: 64 + j
         input_angle_negative = self.z < 0
+        if angle_indx == 0:
+            Cx = (self.x << 5)
+            Cy = (self.y << 5)
+            Sx = self.x
+            Sy = self.y
+        else:
+            Cx = (self.x << 6)
+            Cy = (self.y << 6)
+            Sx = self.x
+            Sy = self.y
+        if input_angle_negative: # rotate counterclockwise
+            self.x = Cx + Sy
+            self.y = Cy - Sx
+            self.z += angle
+        else: # rotate clockwise
+            self.x = Cx - Sy
+            self.y = Cy + Sx
+            self.z -= angle
 
-        # select rotation angle and sign based on input angle
-    
-    
+        if angle_indx == 0:
+            self.x = self.x >> 5
+            self.y = self.y >> 5
+        else:
+            self.x = self.x >> 6
+            self.y = self.y >> 6
 
     def trivial_rotations(self):
 
@@ -49,24 +81,23 @@ class Cordic2:
         else:
             if 2**13 < self.z <= 2**13 * 3:
                 self.x, self.y, self.z = -self.y, self.x, self.z - self.stage_1_rotations[1]
-            elif 2**13 * 3 < self.z <= 2**15:
+            elif 2**13 * 3 < self.z < 2**15:
                 self.x, self.y, self.z = -self.x, -self.y, self.z - self.stage_1_rotations[2]
             else:
                 self.x, self.y, self.z = self.x, self.y, self.z
 
-    def normalize_angle(self):
-        self.z = self.z % 360
-        # normalize angle to [-180, 180[
+    def normalize_and_convert_angle(self):
+        self.z = self.input_angle % 360
+        # normalize angle to [-180, 180[ and convert to fixed-point
         if self.z > 180:
             self.z -= 360
         if self.z < -180:
             self.z += 360
         if self.z == 180:
             self.z = -180
-        # convert to fixed-point representation
         self.z = int(self.z * (2**15 / 180))
 
-    def friend_angles_bit_accurate(self):
+    def friend_angles(self):
         # We wish to implement operations for x and y that result to the desired C +jS operation on a complex number but with hardware semantics.
         # Our options are:
         # P_0 = 25 + j0
@@ -76,17 +107,16 @@ class Cordic2:
         # kernel rotation select
         goal_max_magnitude = int(10.305 * (2**15 / 180))
         abs_z = abs(self.z)
-        
+
         if abs_z <= goal_max_magnitude:
             rotation_idx = 0
         elif abs_z <= self.stage_2_rotations[1] + goal_max_magnitude:
             rotation_idx = 1
         else:
             rotation_idx = 2
-        
+
         input_angle_negative = self.z < 0
 
-        # Let's compute Cx, Sy, Sx, Cy with hardware semantics. 
         if rotation_idx == 0: # P_0 = 25 + j0
             Cx = (self.x << 4) + (self.x << 3) + self.x # 25x = 16x + 8x + x
             Cy = (self.y << 4) + (self.y << 3) + self.y # 25y = 16y + 8y + y
@@ -100,10 +130,10 @@ class Cordic2:
         else: # P_2 = 20 + j15
             Cx = (self.x << 4) + (self.x << 2) # 20x = 16x + 4x
             Cy = (self.y << 4) + (self.y << 2) # 20y = 16y + 4y
-            Sx = (self.x << 4) + (self.x << 2) + (self.x << 1) + self.x # 15x = 16x - x = 16x - 1x
-            Sy = (self.y << 4) + (self.y << 2) + (self.y << 1) + self.y # 15y = 16y - y = 16y - 1y
+            Sx = (self.x << 4) - self.x # 15x = 16x - x
+            Sy = (self.y << 4) - self.y # 15y = 16y - y
 
-        if not input_angle_negative: # rotate counterclockwise
+        if input_angle_negative: # rotate counterclockwise
             self.x = Cx + Sy
             self.y = Cy - Sx
             self.z += self.stage_2_rotations[rotation_idx]
@@ -111,7 +141,14 @@ class Cordic2:
             self.x = Cx - Sy
             self.y = Cy + Sx
             self.z -= self.stage_2_rotations[rotation_idx]
+        # magnitude correction is used here
+        self.x = self.x >> 4
+        self.y = self.y >> 4
+
         """
+        Here is a trial of reading the hardware architecture from the research paper. I realized that it is
+        unnecessarily complex and does not add to the understanding of the algorithm.
+        This will remain here for this for version control but will be scrapped.
         X_sum = self.x << 1
         if rotation_idx != 0:
             if not input_angle_negative:
@@ -123,7 +160,7 @@ class Cordic2:
                 X_sum -= self.x
             else:
                 X_sum += self.x
-        
+
         if rotation_idx == 1:
             X_sum = X_sum << 2
         else:
@@ -134,7 +171,7 @@ class Cordic2:
             tmp_x_sum = (self.x << 5) + self.y
         elif rotation_idx == 2:
             tmp_x_sum = (self.x << 2) + self.y
-        
+
         Y_sum = self.y << 4
         if rotation_idx != 0:
             if not input_angle_negative:
@@ -146,7 +183,7 @@ class Cordic2:
                 Y_sum -= self.y << 3
             else:
                 Y_sum += self.y << 3
-        
+
         if rotation_idx == 2:
             Y_sum += tmp_x_sum << 2
         elif rotation_idx == 0:
@@ -164,7 +201,7 @@ class Cordic2:
                 X_sum = tmp_x_sum + X_sum
             else:
                 X_sum = X_sum + self.x
-        
+
         self.x = X_sum
         self.y = Y_sum
         if input_angle_negative:
@@ -177,22 +214,79 @@ class Cordic2:
         """
     def usr_cordic(self):
         # select rotation angle and sign based on input angle
+        # options are:
+        # P_0 = 129 + j0
+        # P_1 = 128 + j16
         goal_max_magnitude = int(3.563 * (2**15 / 180))
         abs_z = abs(self.z)
-        
+
         if abs_z <= goal_max_magnitude:
             rotation_idx = 0
         else:
             rotation_idx = 1
         input_angle_negative = self.z < 0
 
+        if rotation_idx == 0:
+            Cx = (self.x << 7) + self.x # 129x = 128x + x
+            Cy = (self.y << 7) + self.y # 129y = 128y + y
+            Sx = 0
+            Sy = 0
+        else:
+            Cx = (self.x << 7) # 128x = 128x
+            Cy = (self.y << 7) # 128y = 128y
+            Sx = (self.x << 4) # 16x = 16x
+            Sy = (self.y << 4) # 16y = 16y
+        if input_angle_negative: # rotate counterclockwise
+            self.x = Cx + Sy
+            self.y = Cy - Sx
+            self.z += self.stage_3_rotations[rotation_idx]
+        else: # rotate clockwise
+            self.x = Cx - Sy
+            self.y = Cy + Sx
+            self.z -= self.stage_3_rotations[rotation_idx]
 
-
-        
+        # magnite correction
+        if rotation_idx == 0:
+            self.x = self.x >> 7
+            self.y = self.y >> 7
+        else:
+            self.x = self.x >> 7
+            self.y = self.y >> 7
 
     def nano_rotations(self):
-        # select rotation angle and sign based on input angle
-        pass
-    
+        # stage 6: We find the best candidate of 9 iterations of nano rotations:
+        # P_k = 512 + jk for k = 0, 1, ..., 8
+        goal_max_magnitude = int(0.056 * (2**15 / 180))
+        abs_z = abs(self.z)
+        rotation_idx = 8
+        # The following loop is to be unrolled in the chisel implementation
+        for k in range(0, 9):
+            if abs_z <= goal_max_magnitude + self.stage_6_rotations[k]:
+                rotation_idx = k
+                break
+        input_angle_negative = self.z < 0
+        angle = self.stage_6_rotations[rotation_idx]
+        Cx = (self.x << 9)
+        Cy = (self.y << 9)
+        # Here we multiply
+        Sx = self.x * rotation_idx
+        Sy = self.y * rotation_idx
+        if input_angle_negative: # rotate counterclockwise
+            self.x = Cx + Sy
+            self.y = Cy - Sx
+            self.z += angle
+        else: # rotate clockwise
+            self.x = Cx - Sy
+            self.y = Cy + Sx
+            self.z -= angle
+        # magnitude correction
+        self.x = self.x >> 9
+        self.y = self.y >> 9
+
     def run(self):
-        pass
+        self.trivial_rotations()
+        self.friend_angles()
+        self.usr_cordic()
+        self.cordic(0)
+        self.cordic(1)
+        self.nano_rotations()
