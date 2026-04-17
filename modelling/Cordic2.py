@@ -63,6 +63,45 @@ class Cordic2:
             self.x = self.x >> 6
             self.y = self.y >> 6
 
+    def cordic_optimized(self, angle_indx = 0):
+        if angle_indx == 0:
+            angle = int(1.790 * (2**15 / 180))
+
+        else:
+            angle = int(0.895 * (2**15 / 180))
+
+        # We run two iterations of traditional CORDIC in the same function
+        # stage 4:
+        # Cordidic rotations:
+        # On index 0: 32 + j
+        # On index 1: 64 + j
+
+        input_angle_negative = self.z < 0
+
+        if input_angle_negative: # rotate counterclockwise
+            self.z += angle
+        else: # rotate clockwise
+            self.z -= angle
+
+        if angle_indx == 0:
+            Cx = (self.x << 5)
+            Cy = (self.y << 5)
+            Sx = self.x
+            Sy = self.y
+            self.x = self.adder_subtractor(Cx, Sy, subtract=not input_angle_negative)
+            self.y = self.adder_subtractor(Cy, Sx, subtract=input_angle_negative)
+            self.x = self.x >> 5
+            self.y = self.y >> 5
+        else:
+            Cx = (self.x << 6)
+            Cy = (self.y << 6)
+            Sx = self.x
+            Sy = self.y
+            self.x = self.adder_subtractor(Cx, Sy, subtract=not input_angle_negative)
+            self.y = self.adder_subtractor(Cy, Sx, subtract=input_angle_negative)
+            self.x = self.x >> 6
+            self.y = self.y >> 6
+
     def trivial_rotations(self):
 
         # trivial rotations to reduce the input angle to [-45, 45[
@@ -212,6 +251,78 @@ class Cordic2:
         # select rotation angle and sign based on input angle
         # implementation of the friend angle stage with modelling real hardware behaviour
         """
+    def friend_angles_optimized(self):
+        # Optimized for using less additions and subtractions.
+        # We wish to implement operations for x and y that result to the desired C +jS operation on a complex number but with hardware semantics.
+        # Our options are:
+        # P_0 = 25 + j0
+        # P_1 = 24 + j7
+        # P_2 = 20 + j15
+
+        # kernel rotation select
+        goal_max_magnitude = int(10.305 * (2**15 / 180))
+        abs_z = abs(self.z)
+
+        if abs_z <= goal_max_magnitude:
+            rotation_idx = 0
+        elif abs_z <= self.stage_2_rotations[1] + goal_max_magnitude:
+            rotation_idx = 1
+        else:
+            rotation_idx = 2
+
+        input_angle_negative = self.z < 0
+
+        if rotation_idx == 0: # P_0 = 25 + j0
+            Cx = self.adder_subtractor(self.adder_subtractor((self.x << 4), (self.x << 3), subtract=False), self.x, subtract=False)
+            #Cx = (self.x << 4) + (self.x << 3) + self.x # 25x = 16x + 8x + x
+            #Cy = 0 25y = 0 on stage 2, since cordic is initialized with y = 0, we can skip the addition and subtraction for y in this case
+            #Sx = 0
+            #Sy = 0
+            if input_angle_negative: # rotate counterclockwise
+                self.x = Cx
+                self.y = self.y # Cy - Sx but Cy and Sx are 0 on stage 2, since cordic is initialized with y = 0, we can skip the addition and subtraction for y in this case
+                self.z += self.stage_2_rotations[rotation_idx]
+            else: # rotate clockwise
+                self.x = Cx
+                self.y = self.y # Cy + Sx but Cy and Sx are 0 on stage 2, since cordic is initialized with y = 0, we can skip the addition and subtraction for y in this case
+                self.z -= self.stage_2_rotations[rotation_idx]
+        elif rotation_idx == 1: # P_1 = 24 + j7
+            Cx = self.adder_subtractor((self.x << 4), (self.x << 3), subtract=False)
+            Sx = self.adder_subtractor((self.x << 3), self.x, subtract=True)
+            #Cx = (self.x << 4) + (self.x << 3) # 24x = 16x + 8x
+            #Cy = 0 24y = 0 on stage 2, since cordic is initialized with y = 0, we can skip the addition and subtraction for y in this case
+            #Sx = (self.x << 3) - self.x # 7x = 8x - x
+            # Sy = 0 7y = 0 on stage 2, since cordic is initialized with y = 0, we can skip the addition and subtraction for y in this case
+            if input_angle_negative: # rotate counterclockwise
+                self.x = Cx # + Sy but Sy is 0
+                self.y = -Sx # Cy - Sx but Cy is 0
+                self.z += self.stage_2_rotations[rotation_idx]
+            else: # rotate clockwise
+                self.x = Cx # - Sy but Sy is 0
+                self.y = Sx # Cy + Sx but Cy is 0
+                self.z -= self.stage_2_rotations[rotation_idx]
+        else: # P_2 = 20 + j15
+            Cx = self.adder_subtractor((self.x << 4), (self.x << 2), subtract=False)
+            Sx = self.adder_subtractor((self.x << 4), self.x, subtract=True)
+
+            #Cx = (self.x << 4) + (self.x << 2) # 20x = 16x + 4x
+            # Cy = 0: 20y = 0 on stage 2, since cordic is initialized with y = 0, we can skip the addition and subtraction for y in this case
+            #Sx = (self.x << 4) - self.x # 15x = 16x - x
+            # Sy = 0: 15y = 0 on stage 2, since cordic is initialized with y = 0, we can skip the addition and subtraction for y in this case
+            if input_angle_negative: # rotate counterclockwise
+                self.x = Cx # + Sy but Sy is 0
+                self.y = -Sx # Cy - Sx but Cy is 0. Also in hardware flip bits and add one to get the negative value.
+                self.z += self.stage_2_rotations[rotation_idx]
+            else: # rotate clockwise
+                self.x = Cx # - Sy but Sy is 0
+                self.y = Sx # Cy + Sx but Cy is 0
+                self.z -= self.stage_2_rotations[rotation_idx]
+
+        # Magnitude correction
+        self.x = self.x >> 4
+        self.y = self.y >> 4
+        # Optimized friend angle stage uses maximum of 3 additions/subtractions if rotation is not taken into account.
+
     def usr_cordic(self):
         # select rotation angle and sign based on input angle
         # options are:
@@ -253,6 +364,51 @@ class Cordic2:
             self.x = self.x >> 7
             self.y = self.y >> 7
 
+    def usr_cordic_optimized(self):
+        # select rotation angle and sign based on input angle
+        # options are:
+        # P_0 = 129 + j0
+        # P_1 = 128 + j16
+        goal_max_magnitude = int(3.563 * (2**15 / 180))
+        abs_z = abs(self.z)
+
+        if abs_z <= goal_max_magnitude:
+            rotation_idx = 0
+        else:
+            rotation_idx = 1
+        input_angle_negative = self.z < 0
+
+        if rotation_idx == 0:
+            Cx = (self.x << 7) + self.x # 129x = 128x + x
+            Cy = (self.y << 7) + self.y # 129y = 128y + y
+            #Sx = 0
+            #Sy = 0
+            self.x = Cx
+            self.y = Cy
+            if input_angle_negative: # rotate counterclockwise
+                self.x = Cx
+                self.y = Cy
+                self.z += self.stage_3_rotations[rotation_idx]
+            else: # rotate clockwise
+                self.x = Cx
+                self.y = Cy
+                self.z -= self.stage_3_rotations[rotation_idx]
+        else:
+            Cx = (self.x << 7) # 128x = 128x
+            Cy = (self.y << 7) # 128y = 128y
+            Sx = (self.x << 4) # 16x = 16x
+            Sy = (self.y << 4) # 16y = 16y
+            self.x = self.adder_subtractor(Cx, Sy, subtract=not input_angle_negative)
+            self.y = self.adder_subtractor(Cy, Sx, subtract=input_angle_negative)
+            if input_angle_negative: # rotate counterclockwise
+                self.z += self.stage_3_rotations[rotation_idx]
+            else: # rotate clockwise
+                self.z -= self.stage_3_rotations[rotation_idx]
+
+        # magnitude correction
+        self.x = self.x >> 7
+        self.y = self.y >> 7
+
     def nano_rotations(self):
         # stage 6: We find the best candidate of 9 iterations of nano rotations:
         # P_k = 512 + jk for k = 0, 1, ..., 8
@@ -283,6 +439,11 @@ class Cordic2:
         self.x = self.x >> 9
         self.y = self.y >> 9
 
+    def adder_subtractor(self, a, b, subtract=False):
+        if subtract:
+            return a - b
+        else:
+            return a + b
     def run(self):
         self.trivial_rotations()
         self.friend_angles()
