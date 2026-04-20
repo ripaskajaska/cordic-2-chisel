@@ -19,6 +19,7 @@ class Cordic2:
         if input_type == 0:
             self.normalize_and_convert_angle()
         else:
+            assert isinstance(angle, int)
             self.z = angle
 
     def get_result(self):
@@ -126,15 +127,15 @@ class Cordic2:
                 self.x, self.y, self.z = self.x, self.y, self.z
 
     def normalize_and_convert_angle(self):
-        self.z = self.input_angle % 360
+        z_intermediate = self.input_angle % 360
         # normalize angle to [-180, 180[ and convert to fixed-point
-        if self.z > 180:
-            self.z -= 360
-        if self.z < -180:
-            self.z += 360
-        if self.z == 180:
-            self.z = -180
-        self.z = int(self.z * (2**15 / 180))
+        if z_intermediate > 180:
+            z_intermediate -= 360
+        if z_intermediate < -180:
+            z_intermediate += 360
+        if z_intermediate == 180:
+            z_intermediate = -180
+        self.z = int(z_intermediate * (2**15 / 180))
 
     def friend_angles(self):
         # We wish to implement operations for x and y that result to the desired C +jS operation on a complex number but with hardware semantics.
@@ -184,73 +185,6 @@ class Cordic2:
         self.x = self.x >> 4
         self.y = self.y >> 4
 
-        """
-        Here is a trial of reading the hardware architecture from the research paper. I realized that it is
-        unnecessarily complex and does not add to the understanding of the algorithm.
-        This will remain here for this for version control but will be scrapped.
-        X_sum = self.x << 1
-        if rotation_idx != 0:
-            if not input_angle_negative:
-                X_sum -= self.y << 1
-            else:
-                X_sum += self.y << 1
-        else:
-            if not input_angle_negative:
-                X_sum -= self.x
-            else:
-                X_sum += self.x
-
-        if rotation_idx == 1:
-            X_sum = X_sum << 2
-        else:
-            X_sum = X_sum << 3
-
-        # left shift either by 2 or 5 branch
-        if rotation_idx == 1:
-            tmp_x_sum = (self.x << 5) + self.y
-        elif rotation_idx == 2:
-            tmp_x_sum = (self.x << 2) + self.y
-
-        Y_sum = self.y << 4
-        if rotation_idx != 0:
-            if not input_angle_negative:
-                Y_sum -= self.x
-            else:
-                Y_sum += self.x
-        else: # rotation_idx == 0
-            if not input_angle_negative:
-                Y_sum -= self.y << 3
-            else:
-                Y_sum += self.y << 3
-
-        if rotation_idx == 2:
-            Y_sum += tmp_x_sum << 2
-        elif rotation_idx == 0:
-            Y_sum += self.y
-        else: # index 1
-            Y_sum += X_sum
-
-        if not input_angle_negative:
-            if rotation_idx != 0:
-                X_sum = tmp_x_sum - X_sum
-            else:
-                X_sum = -X_sum + self.x
-        else:
-            if rotation_idx != 0:
-                X_sum = tmp_x_sum + X_sum
-            else:
-                X_sum = X_sum + self.x
-
-        self.x = X_sum
-        self.y = Y_sum
-        if input_angle_negative:
-            self.z += self.stage_2_rotations[rotation_idx]
-        else:
-            self.z -= self.stage_2_rotations[rotation_idx]
-
-        # select rotation angle and sign based on input angle
-        # implementation of the friend angle stage with modelling real hardware behaviour
-        """
     def friend_angles_optimized(self):
         # Optimized for using less additions and subtractions.
         # We wish to implement operations for x and y that result to the desired C +jS operation on a complex number but with hardware semantics.
@@ -438,12 +372,31 @@ class Cordic2:
         # magnitude correction
         self.x = self.x >> 9
         self.y = self.y >> 9
+    def nano_rotations_optimized(self):
+        goal_max_magnitude = int(0.056 * (2**15 / 180))
+        abs_z = abs(self.z)
+        rotation_idx = 8
+        # The following loop is to be unrolled in the chisel implementation
+        for k in range(0, 9):
+            if abs_z <= goal_max_magnitude + self.stage_6_rotations[k]:
+                rotation_idx = k
+                break
+        input_angle_negative = self.z < 0
+        angle = self.stage_6_rotations[rotation_idx]
+        self.z = self.adder_subtractor(self.z, angle, subtract=not input_angle_negative)
+        self.x = self.adder_subtractor(self.x << 9, self.multiplier(self.x, rotation_idx), not input_angle_negative)
+        self.y = self.adder_subtractor(self.y << 9, self.multiplier(self.y, rotation_idx), input_angle_negative)
+        self.x = self.x >> 9
+        self.y = self.y >> 9
 
     def adder_subtractor(self, a, b, subtract=False):
         if subtract:
             return a - b
         else:
             return a + b
+    def multiplier(self, a, b):
+        return a * b
+    
     def run(self):
         self.trivial_rotations()
         self.friend_angles()
@@ -451,3 +404,11 @@ class Cordic2:
         self.cordic(0)
         self.cordic(1)
         self.nano_rotations()
+    
+    def run_optimized(self):
+        self.trivial_rotations()
+        self.friend_angles_optimized()
+        self.usr_cordic_optimized()
+        self.cordic_optimized(0)
+        self.cordic_optimized(1)
+        self.nano_rotations_optimized()
