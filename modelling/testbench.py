@@ -37,6 +37,66 @@ def fxp_to_float(fxp_value: int, fractional_bits: int) -> float:
 def float_to_fxp(value: float, fractional_bits: int) -> int:
     return int(value * (2 ** fractional_bits))
 
+def compare_optimized_stages(k: float, fractional_bits: int, angle_deg: float = None):
+    """
+    Runs both the regular and optimized pipelines on the same input, comparing
+    x, y, z after each stage to pinpoint where they diverge.
+    """
+    if angle_deg is None:
+        angle_deg = get_random_angle()
+
+    x0 = float_to_fxp(k, fractional_bits)
+
+    PASS = "\033[92mPASS\033[0m"
+    FAIL = "\033[91mFAIL\033[0m"
+
+    print(f"\n{'='*65}")
+    print(f"  Stage comparison for angle = {angle_deg:.4f}°")
+    print(f"  Initial x = {x0}, y = 0")
+    print(f"{'='*65}")
+    print(f"  {'Stage':<20} {'x_reg':>8} {'x_opt':>8} {'y_reg':>8} {'y_opt':>8} {'z_reg':>8} {'z_opt':>8}  Match")
+    print(f"  {'-'*62}")
+
+    # Create two identical instances
+    reg = Cordic2(x0, 0, angle_deg, 0)
+    opt = Cordic2(x0, 0, angle_deg, 0)
+
+    stages_reg = [
+        ("trivial_rotations",  reg.trivial_rotations),
+        ("friend_angles",      reg.friend_angles),
+        ("usr_cordic",         reg.usr_cordic),
+        ("cordic(0)",          lambda: reg.cordic(0)),
+        ("cordic(1)",          lambda: reg.cordic(1)),
+        ("nano_rotations",     reg.nano_rotations),
+    ]
+    stages_opt = [
+        ("trivial_rotations",  opt.trivial_rotations),
+        ("friend_angles_opt",  opt.friend_angles_optimized),
+        ("usr_cordic_opt",     opt.usr_cordic_optimized),
+        ("cordic_opt(0)",      lambda: opt.cordic_optimized(0)),
+        ("cordic_opt(1)",      lambda: opt.cordic_optimized(1)),
+        ("nano_rotations_opt", opt.nano_rotations_optimized),
+    ]
+
+    all_match = True
+    for (name_r, fn_r), (name_o, fn_o) in zip(stages_reg, stages_opt):
+        fn_r()
+        fn_o()
+        rx, ry, rz = reg.get_result()
+        ox, oy, oz = opt.get_result()
+        match = (rx == ox) and (ry == oy) and (rz == oz)
+        if not match:
+            all_match = False
+        status = PASS if match else FAIL
+        print(f"  {name_r:<20} {rx:>8} {ox:>8} {ry:>8} {oy:>8} {rz:>8} {oz:>8}  {status}")
+
+    print(f"{'='*65}")
+    if all_match:
+        print(f"  Overall: {PASS} — all stages match.")
+    else:
+        print(f"  Overall: {FAIL} — stages diverge (first FAIL is the culprit).")
+    print(f"{'='*65}\n")
+
 def plot_sine(k: float, fractional_bits: int):
     x = float_to_fxp(k, fractional_bits)
     angles = np.linspace(-360, 360, 1000)
@@ -49,8 +109,8 @@ def plot_sine(k: float, fractional_bits: int):
         out_x, out_y, out_z = cordic2.get_result()
         y_normalized = fxp_to_float(out_y, fractional_bits)
         cordic_sines.append(y_normalized)
-    
-    cordic_sines = np.array(cordic_sines) 
+
+    cordic_sines = np.array(cordic_sines)
     plt.figure(figsize=(10, 5))
     plt.plot(angles, ref_sines, label='Reference Sine Wave', color='blue')
     plt.plot(angles, cordic_sines, label='CORDIC2 Sine Wave', color='red')
@@ -91,7 +151,7 @@ def average_max_error_calculation(k: float, fractional_bits: int, angles: int):
     print(f"Average error over {angles} random points for sine: {np.average(sine_error)}\n")
     print(f"Average error over {angles} random points for cosine: {np.average(cosine_error)}\n")
     print("=============================================================")
-    
+
 def compare_optimized_and_non(k: float, fractional_bits: int):
     print("=============================================================")
     print("Comparing optimized CORDIC 2 to regular")
@@ -128,7 +188,7 @@ def plot_sine_and_cosine(k: float, fractional_bits: int):
     ref_sines = np.sin(np.radians(angles))
     cordic_cosines = []
     cordic_sines = []
-    
+
     for angle in angles:
         # Simulate CORDIC cosine calculation (replace with actual CORDIC implementation)
         cordic2 = Cordic2(x, 0, angle, 0)
