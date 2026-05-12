@@ -1,4 +1,6 @@
 package Cordic2
+import chisel3._
+import chisel3.util._
 
 object Cordic2Constants {
   def apply(N: Int): Cordic2Constants = new Cordic2Constants(N)
@@ -8,9 +10,7 @@ class Cordic2Constants(val N: Int = 16) {
   private def degToFp(deg: Double): Int = (deg * (1 << (N-1)) / 180.0).toInt
 
   // Stage 1 thresholds
-  val ROT_45  = 1 << (N-3)   // π/4
-  val ROT_90  = 1 << (N-2)   // π/2
-  val ROT_180 = 1 << (N-1)   // π (= exclusive upper bound)
+  val TRIVIAL_ROT = Seq(0, 1 << (N-2), (-(1 << (N-1)))) // 0, 2^14, -2^15
 
   // Stage 2: friend_angles
   val FRIEND_ROT      = Seq(0, degToFp(16.260), degToFp(36.870))
@@ -31,9 +31,6 @@ class Cordic2Constants(val N: Int = 16) {
 
   def adderSub(a: SInt, b: SInt, subtract: Bool): SInt =
     Mux(subtract, a - b, a + b)
-
-  // Arithmetic truncation back to N bits
-  def trunc(x: SInt, N: Int): SInt = x(N-1, 0).asSInt
 
   def abs(x: SInt): SInt = Mux(x < 0.S, -x, x)
 }
