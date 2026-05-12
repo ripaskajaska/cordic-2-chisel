@@ -2,6 +2,7 @@ object Cordic2Constants {
   def apply(N: Int): Cordic2Constants = new Cordic2Constants(N)
 }
 class Cordic2Constants(val N: Int = 16) {
+  // Convert degrees to fixed-point representation (Q1.(N-1))
   private def degToFp(deg: Double): Int = (deg * (1 << (N-1)) / 180.0).toInt
 
   // Stage 1 thresholds
@@ -29,5 +30,7 @@ class Cordic2Constants(val N: Int = 16) {
 def adderSub(a: SInt, b: SInt, subtract: Bool): SInt =
   Mux(subtract, a - b, a + b)
 
-// Arithmetic right-truncation back to N bits after wide intermediate
-def trunc(x: SInt, N: Int): SInt = x(N-1, 0).asSInt  
+// Arithmetic truncation back to N bits
+def trunc(x: SInt, N: Int): SInt = x(N-1, 0).asSInt
+
+def abs(x: SInt): SInt = Mux(x < 0.S, -x, x)
