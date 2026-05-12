@@ -1,3 +1,4 @@
+package Cordic2
 import chisel3._
 import chisel3.util._
 
@@ -23,5 +24,5 @@ class TopCordic2 extends Module {
 class Cordic2Input(N: Int = 16) extends Bundle {
   val x = SInt(N.W)
   val y = SInt(N.W)
-  val z = SInt((N+1).W)   // for ensuring that z can represent angles up to 180 degrees without overflow
+  val z = SInt(N.W)
 }

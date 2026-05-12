@@ -1,3 +1,5 @@
+package Cordic2
+
 object Cordic2Constants {
   def apply(N: Int): Cordic2Constants = new Cordic2Constants(N)
 }
@@ -25,12 +27,13 @@ class Cordic2Constants(val N: Int = 16) {
   val NANO_STEP     = degToFp(0.112)
   val NANO_GOAL_MAX = degToFp(0.056)
   val NANO_ROTS     = (0 to 8).map(_ * NANO_STEP)
+
+
+  def adderSub(a: SInt, b: SInt, subtract: Bool): SInt =
+    Mux(subtract, a - b, a + b)
+
+  // Arithmetic truncation back to N bits
+  def trunc(x: SInt, N: Int): SInt = x(N-1, 0).asSInt
+
+  def abs(x: SInt): SInt = Mux(x < 0.S, -x, x)
 }
-
-def adderSub(a: SInt, b: SInt, subtract: Bool): SInt =
-  Mux(subtract, a - b, a + b)
-
-// Arithmetic truncation back to N bits
-def trunc(x: SInt, N: Int): SInt = x(N-1, 0).asSInt
-
-def abs(x: SInt): SInt = Mux(x < 0.S, -x, x)

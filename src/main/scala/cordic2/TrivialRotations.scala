@@ -1,12 +1,12 @@
+package Cordic2
 import chisel3._
 import chisel3.util._
-import cordic2._
 
 class TrivialRotations(N: Int = 16) extends Module {
   val input = IO(Flipped(Valid(new Cordic2Input(N))))
   val output = IO(Valid(new Cordic2Payload(N)))
 
-  if input.valid then
+  when (input.valid) {
     val x = input.bits.x
     val y = input.bits.y
     val z = input.bits.z
@@ -52,4 +52,5 @@ class TrivialRotations(N: Int = 16) extends Module {
         output.valid := true.B
       }
     }
+  }
 }
