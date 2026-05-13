@@ -3,54 +3,161 @@ import chisel3._
 import chisel3.util._
 
 class FriendAngles(N: Int = 16) extends Module {
-  val input = IO(Flipped(Valid(new Cordic2Payload(N))))
+ val input = IO(Flipped(Valid(new Cordic2Payload(N))))
   val output = IO(Valid(new Cordic2Payload(N)))
 
-  val x = input.bits.x
-  val y = input.bits.y
-  val z = input.bits.z
-  val deg_45 = (1 << (N-3)).S  // 45 degrees in fixed-point representation
-  val deg_135 = (deg_45 * 3.S)  // 135 degrees in fixed-point representation
-  val neg_deg_180 = (-1 << (N-1)).S  // -180 degrees in fixed-point representation
-  val deg_180 = ((1 << (N-1)) - 1).S  // positive ~180 degrees in fixed-point representation
-  val constants = new Cordic2Constants(N)
-  val busy        = RegInit(false.B) // Registers to hold the output of the rotation while it's being processed. 
-  val resultValid = RegInit(false.B) // keep track of whether the output registers hold a valid result for final output assignment
-  val subtract    = RegInit(false.B) // keep track of whether the next rotation should subtract or add the angle
-  val rot         = RegInit(0.S(N.W)) // angle index for rotation
-  val absZ        = RegInit(0.S(N.W))
-  output.valid := RegInit(false.B)
+  val constants   = new Cordic2Constants(N)
+
+  val busy        = RegInit(false.B)  // stage is processing
+  val resultValid = RegInit(false.B)  // x/y computed, z not yet calculated
+  val subtract    = RegInit(false.B)  // whether to subtract rot from z
+  val rot         = RegInit(0.S(N.W)) // rotation amount to apply to z
+  val calcStage   = RegInit(0.U(1.W)) // Keep track of which adder/subtractor stage we're in 
+  val rotIdx      = RegInit(0.U(2.W)) 
+  // Registered capture of input — stable across multi-cycle processing
+  val xReg = RegInit(0.S(N.W))
+  val yReg = RegInit(0.S(N.W))
+  val zReg = RegInit(0.S(N.W))
+
+  // Registered output bits — hold values until output.valid is asserted
+  val outX = RegInit(0.S(N.W))
+  val outY = RegInit(0.S(N.W))
+  val outZ = RegInit(0.S(N.W))
+
+  // Friend angles has maximum of 5 adders used. We declare them and their I/O wires here
+  val add1_a   = Wire(SInt(N.W))
+  val add1_b   = Wire(SInt(N.W))
+  val add1_sub = Wire(Bool())
+  val add1_out = constants.adderSub(add1_a, add1_b, add1_sub)
+
+  val add2_a   = Wire(SInt(N.W))
+  val add2_b   = Wire(SInt(N.W))
+  val add2_sub = Wire(Bool())
+  val add2_out = constants.adderSub(add2_a, add2_b, add2_sub)
+
+  val add3_a   = Wire(SInt(N.W))
+  val add3_b   = Wire(SInt(N.W))
+  val add3_sub = Wire(Bool())
+  val add3_out = constants.adderSub(add3_a, add3_b, add3_sub)
+
+  val add4_a   = Wire(SInt(N.W))
+  val add4_b   = Wire(SInt(N.W))
+  val add4_sub = Wire(Bool())
+  val add4_out = constants.adderSub(add4_a, add4_b, add4_sub)
+
+  val add5_a   = Wire(SInt(N.W))
+  val add5_b   = Wire(SInt(N.W))
+  val add5_sub = Wire(Bool())
+  val add5_out = constants.adderSub(add5_a, add5_b, add5_sub)
+
+  // Default combinational output
+  output.valid  := false.B
+  output.bits.x := outX
+  output.bits.y := outY
+  output.bits.z := outZ
+
+  // Condition 1 & 2: capture input into registers and set busy
   when (input.valid && !busy && !resultValid) {
     busy := true.B
-    absZ := constants.abs(z)
-    when (z < 0.S) {
-      // Rotate clockwise
-      
-      subtract := true.B
-    } .otherwise {
-      // Rotate counterclockwise  
-      
-    }
-    when (busy && resultValid) {
-      output.bits.z := constants.adderSub(z, rot, subtract)
-      busy := false.B
-    }
-    when (!busy && resultValid) {
-      output.valid := true.B
-    }
+    xReg := input.bits.x
+    yReg := input.bits.y
+    zReg := input.bits.z
   }
-  when(input.valid) {
+
+  // Condition 3: main functionality — only when busy and result not yet ready
+  when(busy && !resultValid) {
+    val absZ = constants.abs(zReg)
     when (absZ <= constants.FRIEND_GOAL_MAX.S) {
-      val rotIdx = 0
-      val rot = constants.FRIEND_ROT(0)
+      rotIdx := 0.U
+      rot := constants.FRIEND_ROT(0).U
     } .elsewhen (absZ <= (constants.FRIEND_ROT(1) + constants.FRIEND_GOAL_MAX).S) {
-      val rotIdx = 1
-      val rot = constants.FRIEND_ROT(1)
+      rotIdx := 1.U
+      rot := constants.FRIEND_ROT(1).U
     } .otherwise {
-      val rotIdx = 2
-      val rot = constants.FRIEND_ROT(2)
+      rotIdx := 2.U
+      rot := constants.FRIEND_ROT(2).U
+    }
+    val yIsZero = (yReg === 0.S)
+    val xIsZero = (xReg === 0.S)
+    
+    when (rotIdx === 0.U) {
+      when (yIsZero) {
+        when (calcStage === 0.U) {
+          // self.adder_subtractor(self.x << 4, self.x << 3, False)
+          add1_a   := xReg << 4
+          add1_b   := xReg << 3
+          add1_sub := false.B
+          calcStage := 1.U
+        } .elsewhen(calcStage === 1.U) {
+          // self.adder_subtractor(add1_out, self.x, False)
+          add2_a   := add1_out
+          add2_b   := xReg
+          add2_sub := false.B
+          calcStage := 0.U // reset for next time
+
+        }
+    } .elsewhen(xIsZero) {
+      when (calcStage === 0.U) {
+        // self.adder_subtractor(self.y << 4, self.y << 3, False)
+        add1_a   := yReg << 4
+        add1_b   := yReg << 3
+        add1_sub := false.B
+        calcStage := 1.U
+      } .elsewhen(calcStage === 1.U) {
+        // self.adder_subtractor(add1_out, self.y, False)
+        add2_a   := add1_out
+        add2_b   := yReg
+        add2_sub := false.B
+        calcStage := 2.U
+    }
+
+    }
+    } .elsewhen (rotIdx === 1) {
+      outX        := yReg
+      outY        := -xReg
+      subtract    := true.B
+    } .otherwise {
+      outX        := -xReg
+      outY        := -yReg
+      subtract    := true.B
+    }
+
+    when (zReg < 0.S) {
+      // Rotate clockwise
+
+
+      outX        := yReg
+      outY        := -xReg
+      subtract    := true.B
+    } .otherwise {
+      // Rotate counterclockwise
+      outX        := -yReg
+      outY        := xReg
+      subtract    := false.B
     }
 
     
   }
+  // Condition 4: compute z and clear busy (only reached when adderSub is needed;
+  // otherwise branches set busy=false so this block never fires for them)
+  when (busy && resultValid) {
+    outZ := constants.adderSub(zReg, rot, subtract)
+    busy := false.B
+  }
+
+  // Condition 5: assert output valid and clear resultValid so stage can accept new input
+  when (!busy && resultValid) {
+    output.valid := true.B
+    resultValid  := false.B
+    xReg := 0.S
+    yReg := 0.S
+    zReg := 0.S
+    outX := 0.S
+    outY := 0.S
+    outZ := 0.S
+    rot      := 0.S
+    subtract := false.B
+  }
+
+  
 }
