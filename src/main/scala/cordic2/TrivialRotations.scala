@@ -92,10 +92,12 @@ class TrivialRotations(N: Int = 16) extends Module {
 
   // Condition 4: compute z and clear busy (only reached when adderSub is needed;
   // otherwise branches set busy=false so this block never fires for them)
+  // NOTE: This block should be calculated in parallel with the stage calculations to save time, move it!
   when (busy && resultValid) {
     outZ := constants.adderSub(zReg, rot, subtract)
     busy := false.B
   }
+
 
   // Condition 5: assert output valid and clear resultValid so stage can accept new input
   when (!busy && resultValid) {

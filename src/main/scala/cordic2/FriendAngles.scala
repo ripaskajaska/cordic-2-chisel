@@ -12,7 +12,7 @@ class FriendAngles(N: Int = 16) extends Module {
   val resultValid = RegInit(false.B)  // x/y computed, z not yet calculated
   val subtract    = RegInit(false.B)  // whether to subtract rot from z
   val rot         = RegInit(0.S(N.W)) // rotation amount to apply to z
-  val calcStage   = RegInit(0.U(1.W)) // Keep track of which adder/subtractor stage we're in 
+  val calcStage   = RegInit(0.U(2.W)) // Keep track of which adder/subtractor stage we're in 
   val rotIdx      = RegInit(0.U(2.W)) 
   // Registered capture of input — stable across multi-cycle processing
   val xReg = RegInit(0.S(N.W))
@@ -93,59 +93,168 @@ class FriendAngles(N: Int = 16) extends Module {
           add2_a   := add1_out
           add2_b   := xReg
           add2_sub := false.B
-          calcStage := 0.U // reset for next time
-
+          calcStage := 2.U 
+        } .elsewhen(calcStage === 2.U) {
+          outX := add2_out
+          outY := yReg
+          resultValid := true.B
         }
-    } .elsewhen(xIsZero) {
-      when (calcStage === 0.U) {
-        // self.adder_subtractor(self.y << 4, self.y << 3, False)
-        add1_a   := yReg << 4
-        add1_b   := yReg << 3
-        add1_sub := false.B
-        calcStage := 1.U
-      } .elsewhen(calcStage === 1.U) {
-        // self.adder_subtractor(add1_out, self.y, False)
-        add2_a   := add1_out
-        add2_b   := yReg
-        add2_sub := false.B
-        calcStage := 2.U
+      } .elsewhen(xIsZero) {
+        when (calcStage === 0.U) {
+          // self.adder_subtractor(self.y << 4, self.y << 3, False)
+          add1_a   := yReg << 4
+          add1_b   := yReg << 3
+          add1_sub := false.B
+          calcStage := 1.U
+        } .elsewhen(calcStage === 1.U) {
+          // self.adder_subtractor(add1_out, self.y, False)
+          add2_a   := add1_out
+          add2_b   := yReg
+          add2_sub := false.B
+          calcStage := 2.U
+        }.elsewhen(calcStage === 2.U) {
+          outX := xReg
+          outY := add2_out
+          resultValid := true.B
+          calcStage := 0.U
+          when(zReg < 0.S) {
+            subtract := false.B
+          } .otherwise {
+            subtract := true.B
+          }
+        }
+      }
+    } .elsewhen (rotIdx === 1.U) {
+      when (yIsZero) {
+        when (calcStage === 0.U) {
+          // 16x+8x -> Cx
+          add1_a   := xReg << 4
+          add1_b   := xReg << 3
+          add1_sub := false.B
+          // 8x-x -> Sx
+          add2_a   := xReg << 3
+          add2_b   := xReg
+          add2_sub := true.B
+          calcStage := 1.U
+        } .elsewhen(calcStage === 1.U) {
+          when(zReg < 0.S) {
+            // Cx + Sy -> outX, y=0 => outX = Cx
+            outX := add1_out
+            // Cy - Sx -> outY = -Sx
+            outY := -add2_out
+          } .otherwise {
+            subtract := true.B
+            // Cx - Sy, outY = 0 => outX = Cx
+            outX := add1_out
+            // Cy + Sx -> outY = Sx
+            outY := add2_out
+          }
+          resultValid := true.B
+          calcStage := 0.U
+        }
+      } .elsewhen (xIsZero) {
+        when (calcStage === 0.U) {
+          // 16y+8y -> Cy
+          add1_a   := yReg << 4
+          add1_b   := yReg << 3
+          add1_sub := false.B
+          // 8y-y -> Sy
+          add2_a   := yReg << 3
+          add2_b   := yReg
+          add2_sub := true.B
+          calcStage := 1.U
+        } .elsewhen(calcStage === 1.U) {
+          when(zReg < 0.S) {
+            // Cx + Sy -> outX, x=0 => outX = Sy
+            outX := add2_out
+            // Cy - Sx -> outY = Cy
+            outY := add1_out
+          } .otherwise {
+            subtract := true.B
+            // Cx - Sy, x=0 => outX = -Sy
+            outX := -add2_out
+            // Cy + Sx -> outY = Cy
+            outY := add1_out
+          }
+          resultValid := true.B
+          calcStage := 0.U
+        }
+      }
+    } .elsewhen(rotIdx === 2.U) {
+      // Cx = 0 if x = 0 else 16x+4x
+      // Sx = 0 if x = 0 else 16x-x
+      // Cy = 0 if y = 0 else 16y+4y
+      // Sy = 0 if y = 0 else 16y-y
+      when (yIsZero) {
+        when (calcStage === 0.U) {
+          // Cx: 16x+4x
+          add1_a   := xReg << 4
+          add1_b   := xReg << 2
+          add1_sub := false.B
+          // Sx: 16x-x
+          add2_a   := xReg << 4
+          add2_b   := xReg
+          add2_sub := true.B
+          calcStage := 1.U
+        } .elsewhen(calcStage === 1.U) {
+          // y is zero
+          when(zReg < 0.S) {
+            // Cx + Sy -> outX, y=0 => outX = Cx
+            outX := add1_out
+            // Cy - Sx -> outY = -Sx
+            outY := -add2_out
+          } .otherwise {
+            subtract := true.B
+            // Cx - Sy, y=0 => outX = Cx
+            outX := add1_out
+            // Cy + Sx -> outY = Sx
+            outY := add2_out
+          }
+          resultValid := true.B
+          calcStage := 0.U
+        }
+      } .elsewhen (xIsZero) {
+        when (calcStage === 0.U) {
+          // Cy: 16y+4y
+          add1_a   := yReg << 4
+          add1_b   := yReg << 2
+          add1_sub := false.B
+          // Sy: 16y-y
+          add2_a   := yReg << 4
+          add2_b   := yReg
+          add2_sub := true.B
+          calcStage := 1.U
+        } .elsewhen(calcStage === 1.U) {
+          // x is zero
+          when(zReg < 0.S) {
+            // Cx + Sy -> outX, x=0 => outX = Sy
+            outX := add2_out
+            // Cy - Sx -> outY = Cy
+            outY := add1_out
+          } .otherwise {
+            subtract := true.B
+            // Cx - Sy, x=0 => outX = -Sy
+            outX := -add2_out
+            // Cy + Sx -> outY = Cy
+            outY := add1_out
+          }
+          resultValid := true.B
+          calcStage := 0.U
+        }
+      }
     }
-
-    }
-    } .elsewhen (rotIdx === 1) {
-      outX        := yReg
-      outY        := -xReg
-      subtract    := true.B
-    } .otherwise {
-      outX        := -xReg
-      outY        := -yReg
-      subtract    := true.B
-    }
-
-    when (zReg < 0.S) {
-      // Rotate clockwise
-
-
-      outX        := yReg
-      outY        := -xReg
-      subtract    := true.B
-    } .otherwise {
-      // Rotate counterclockwise
-      outX        := -yReg
-      outY        := xReg
-      subtract    := false.B
-    }
-
-    
   }
+
   // Condition 4: compute z and clear busy (only reached when adderSub is needed;
   // otherwise branches set busy=false so this block never fires for them)
+  // TODO: This block should be calculated in parallel with the stage calculations to save time, move it!
   when (busy && resultValid) {
     outZ := constants.adderSub(zReg, rot, subtract)
     busy := false.B
   }
 
   // Condition 5: assert output valid and clear resultValid so stage can accept new input
+ // TODO: update
   when (!busy && resultValid) {
     output.valid := true.B
     resultValid  := false.B
