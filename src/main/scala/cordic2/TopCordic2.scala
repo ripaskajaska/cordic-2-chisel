@@ -19,16 +19,14 @@ class TopCordic2(N: Int = 16) extends Module {
   val trivialRot   = Module(new TrivialRotations(N))
   val friendAngles = Module(new FriendAngles(N))
   val usrCordic    = Module(new USRCordic(N))
-  val cordic0      = Module(new Cordic(N, 0))
-  val cordic1      = Module(new Cordic(N, 1))
+  val cordic       = Module(new Cordic(N))
   val nanoRot      = Module(new NanoRotations(N))
 
   trivialRot.input   <> input
   friendAngles.input <> trivialRot.output
   usrCordic.input    <> friendAngles.output
-  cordic0.input      <> usrCordic.output
-  cordic1.input      <> cordic0.output
-  nanoRot.input      <> cordic1.output
+  cordic.input       <> usrCordic.output
+  nanoRot.input      <> cordic.output
   output             <> nanoRot.output
 }
 

@@ -3,7 +3,7 @@ import chisel3._
 import chisel3.util._
 
 class FriendAngles(N: Int = 16) extends Module {
- val input = IO(Flipped(Valid(new Cordic2Payload(N))))
+  val input = IO(Flipped(Valid(new Cordic2Payload(N))))
   val output = IO(Valid(new Cordic2Payload(N)))
 
   val constants   = new Cordic2Constants(N)
@@ -28,26 +28,36 @@ class FriendAngles(N: Int = 16) extends Module {
   val outY = RegInit(0.S(N.W))
   val outZ = RegInit(0.S(N.W))
 
-  // Friend angles has maximum of 5 adders used. We declare them and their I/O wires here
-  val add1_a   = Wire(SInt(N.W))
-  val add1_b   = Wire(SInt(N.W))
+  val interReg = RegInit(0.S(N.W)) // intermediate register to hold values between adder stages
+  
+  // Friend angles has maximum of 5 adders used. We declare them and their I/O wires here.
+  // NOTE: Adder input/output wires use width inference (SInt() not SInt(N.W)).
+  // This prevents truncation of intermediate values during shifts (e.g., xReg << 4 is 20 bits).
+  // Chisel will infer the maximum width needed across all assignments to each wire.
+  val add1_a   = Wire(SInt())
+  val add1_b   = Wire(SInt())
   val add1_sub = Wire(Bool())
   val add1_out = constants.adderSub(add1_a, add1_b, add1_sub)
 
-  val add2_a   = Wire(SInt(N.W))
-  val add2_b   = Wire(SInt(N.W))
+  val add2_a   = Wire(SInt())
+  val add2_b   = Wire(SInt())
   val add2_sub = Wire(Bool())
   val add2_out = constants.adderSub(add2_a, add2_b, add2_sub)
 
-  val add3_a   = Wire(SInt(N.W))
-  val add3_b   = Wire(SInt(N.W))
+  val add3_a   = Wire(SInt())
+  val add3_b   = Wire(SInt())
   val add3_sub = Wire(Bool())
   val add3_out = constants.adderSub(add3_a, add3_b, add3_sub)
 
+  // Declare default values for adder inputs to avoid latching irrelevant values
+  add1_a := DontCare; add1_b := DontCare; add1_sub := DontCare
+  add2_a := DontCare; add2_b := DontCare; add2_sub := DontCare
+  add3_a := DontCare; add3_b := DontCare; add3_sub := DontCare
+
   // Default combinational output
   output.valid  := false.B
-  output.bits.x := outX >> 4
-  output.bits.y := outY >> 4
+  output.bits.x := outX
+  output.bits.y := outY
   output.bits.z := outZ
 
   // Condition 1 & 2: capture input into registers and set busy
@@ -70,18 +80,16 @@ class FriendAngles(N: Int = 16) extends Module {
       rotIdx := 2.U
       rot := constants.FRIEND_ROT(2).S
     }
+    when(zReg < 0.S) {
+      subtract := false.B
+    } .otherwise {
+      subtract := true.B
+    }
+    subtractValid := true.B
     rotSet := true.B
   }
   // Condition 4: main functionality — only when busy and result not yet ready
   when(busy && !resultValid && rotSet) {
-    when(zReg < 0.S && !subtractValid && !zCalcDone) {
-      subtract := false.B
-      subtractValid := true.B
-    } .otherwise {
-      subtract := true.B
-      subtractValid := true.B
-    }
-    
     val yIsZero = (yReg === 0.S)
     val xIsZero = (xReg === 0.S)
     // In friend angles, either x or y is zero, since y starts at zero
@@ -93,15 +101,16 @@ class FriendAngles(N: Int = 16) extends Module {
           add1_a   := xReg << 4
           add1_b   := xReg << 3
           add1_sub := false.B
+          interReg := add1_out
           calcStage := 1.U
           // next clock calculate second addition for Cx
         } .elsewhen(calcStage === 1.U) {
           // Calculate second addition for Cx: Cx + x -> 16x+8x+x
-          add2_a   := add1_out
-          add2_b   := xReg
-          add2_sub := false.B
-          outX := add2_out
-          outY := yReg
+          add1_a   := interReg
+          add1_b   := xReg
+          add1_sub := false.B
+          outX := add1_out >> 4
+          outY := yReg >> 4
           resultValid := true.B
           busy := false.B
           calcStage := 0.U
@@ -112,16 +121,16 @@ class FriendAngles(N: Int = 16) extends Module {
           add1_a   := yReg << 4
           add1_b   := yReg << 3
           add1_sub := false.B
-          busy := false.B
+          interReg := add1_out
           calcStage := 1.U
           // next clock: calculate second addition for Cy
         } .elsewhen(calcStage === 1.U) {
           // Calculate second addition for Cy: Cy + y -> 16y+8y+y
-          add2_a   := add1_out
-          add2_b   := yReg
-          add2_sub := false.B
-          outX := xReg
-          outY := add2_out
+          add1_a   := interReg
+          add1_b   := yReg
+          add1_sub := false.B
+          outX := xReg >> 4
+          outY := add1_out >> 4 
           resultValid := true.B
           busy := false.B
           calcStage := 0.U
@@ -137,8 +146,8 @@ class FriendAngles(N: Int = 16) extends Module {
         add2_a   := xReg << 3
         add2_b   := xReg
         add2_sub := true.B
-        outX := add1_out
-        outY := Mux(!subtract, -add2_out, add2_out)
+        outX := add1_out >> 4
+        outY := Mux(!subtract, -add2_out, add2_out) >> 4
         resultValid := true.B
         busy := false.B
       } .elsewhen (xIsZero) { // x = 0
@@ -150,8 +159,8 @@ class FriendAngles(N: Int = 16) extends Module {
         add2_a   := yReg << 3
         add2_b   := yReg
         add2_sub := true.B
-        outX := Mux(!subtract, add2_out, -add2_out)
-        outY := add1_out
+        outX := Mux(!subtract, add2_out, -add2_out) >> 4
+        outY := add1_out >> 4
         resultValid := true.B
         busy := false.B
       }
@@ -169,8 +178,8 @@ class FriendAngles(N: Int = 16) extends Module {
         add2_a   := xReg << 4
         add2_b   := xReg
         add2_sub := true.B
-        outX := add1_out
-        outY := Mux(!subtract, -add2_out, add2_out)
+        outX := add1_out >> 4
+        outY := Mux(!subtract, -add2_out, add2_out) >> 4
         resultValid := true.B
         busy := false.B
       } .elsewhen (xIsZero) { // x = 0
@@ -182,8 +191,8 @@ class FriendAngles(N: Int = 16) extends Module {
         add2_a   := yReg << 4
         add2_b   := yReg
         add2_sub := true.B
-        outX := Mux(!subtract, add2_out, -add2_out)
-        outY := add1_out
+        outX := Mux(!subtract, add2_out, -add2_out) >> 4
+        outY := add1_out >> 4
         resultValid := true.B
         busy := false.B
       }
@@ -191,12 +200,14 @@ class FriendAngles(N: Int = 16) extends Module {
   }
   // Condition 5: compute z, happens in parallel with condition 4 but only after we've set the subtract signal
   when (subtractValid && busy && !zCalcDone) {
-    outZ := constants.adderSub(zReg, rot, subtract)
+    add3_a := zReg
+    add3_b := rot
+    add3_sub := subtract
+    outZ := add3_out
     subtractValid := false.B
     zCalcDone := true.B
   }
   // Condition 6: assert output valid and clear resultValid so stage can accept new input
- // TODO: update
   when (!busy && resultValid) {
     output.valid := true.B
     resultValid  := false.B
@@ -207,6 +218,8 @@ class FriendAngles(N: Int = 16) extends Module {
     outY := 0.S
     outZ := 0.S
     rot      := 0.S
+    rotSet := false.B
+    interReg := 0.S
     subtract := false.B
     zCalcDone := false.B
   }

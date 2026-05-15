@@ -212,7 +212,7 @@ class Cordic2:
         x_is_zero = (self.x == 0)
 
         if rotation_idx == 0: # P_0 = 25 + j0  (Sx=0, Sy=0 always)
-            # 2 adders when neither is zero, 1 when one is zero
+            # 2 adders for Cx (or 0 if x_is_zero), 2 adders for Cy (or 0 if y_is_zero), no final adders since Sx=Sy=0 always
             Cx = 0 if x_is_zero else self.adder_subtractor(self.adder_subtractor(self.x << 4, self.x << 3), self.x) # 16x+8x+x
             Cy = 0 if y_is_zero else self.adder_subtractor(self.adder_subtractor(self.y << 4, self.y << 3), self.y) # 16y+8y+y
             self.x = Cx  # Cx + 0
