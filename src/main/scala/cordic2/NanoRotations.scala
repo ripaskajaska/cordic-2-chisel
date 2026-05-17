@@ -110,11 +110,11 @@ class NanoRotations(N: Int = 16) extends Module {
     } .elsewhen(rotIdx === 1.U) { // 1: x*1 = x, y*1 = y
       // We skip multiplication entirely since it's just x and y
       add1_a   := xReg << 9
-      add1_b   := xReg
+      add1_b   := yReg
       add1_sub := subtract
       outX := add1_out >> 9
       add2_a   := yReg << 9
-      add2_b   := yReg
+      add2_b   := xReg
       add2_sub := !subtract
       outY := add2_out >> 9
       add5_a   := zReg
@@ -125,11 +125,11 @@ class NanoRotations(N: Int = 16) extends Module {
       busy := false.B
     } .elsewhen(rotIdx === 2.U) { // 2: x*2 = x << 1, y*2 = y << 1
       add1_a   := xReg << 9
-      add1_b   := xReg << 1
+      add1_b   := yReg << 1
       add1_sub := subtract
       outX := add1_out >> 9
       add2_a   := yReg << 9
-      add2_b   := yReg << 1
+      add2_b   := xReg << 1
       add2_sub := !subtract
       outY := add2_out >> 9
       add5_a   := zReg
@@ -139,11 +139,11 @@ class NanoRotations(N: Int = 16) extends Module {
       resultValid := true.B
       busy := false.B
     } .elsewhen(rotIdx === 3.U) { // 3: X*3 = (x << 1) + x, Y*3 = (y << 1) + y
-      add1_a   := xReg << 1; add1_b   := xReg; add1_sub := false.B
-      add2_a := add1_out; add2_b := xReg << 9; add2_sub := subtract
+      add1_a   := yReg << 1; add1_b   := yReg; add1_sub := false.B
+      add2_a := xReg << 9; add2_b := add1_out; add2_sub := subtract
       outX := add2_out >> 9
-      add3_a   := yReg << 1; add3_b   := yReg; add3_sub := false.B
-      add4_a := add3_out; add4_b := yReg << 9; add4_sub := !subtract
+      add3_a   := xReg << 1; add3_b   := xReg; add3_sub := false.B
+      add4_a := yReg << 9; add4_b := add3_out; add4_sub := !subtract
       outY := add4_out >> 9
       add5_a   := zReg; add5_b   := rot; add5_sub := subtract
       outZ := add5_out
@@ -151,11 +151,11 @@ class NanoRotations(N: Int = 16) extends Module {
       busy := false.B
     } .elsewhen(rotIdx === 4.U) { // 4: X*4 = x << 2, Y*4 = y << 2
       add1_a   := xReg << 9
-      add1_b   := xReg << 2
+      add1_b   := yReg << 2
       add1_sub := subtract
       outX := add1_out >> 9
       add2_a   := yReg << 9
-      add2_b   := yReg << 2
+      add2_b   := xReg << 2
       add2_sub := !subtract
       outY := add2_out >> 9
       add5_a   := zReg
@@ -165,33 +165,33 @@ class NanoRotations(N: Int = 16) extends Module {
       resultValid := true.B
       busy := false.B
     } .elsewhen(rotIdx === 5.U) { // 5: X*5 = (x << 2) + x, Y*5 = (y << 2) + y
-      add1_a   := xReg << 2; add1_b   := xReg; add1_sub := false.B
-      add2_a := add1_out; add2_b := xReg << 9; add2_sub := subtract
+      add1_a   := yReg << 2; add1_b   := yReg; add1_sub := false.B
+      add2_a := xReg << 9; add2_b := add1_out; add2_sub := subtract
       outX := add2_out >> 9
-      add3_a   := yReg << 2; add3_b   := yReg; add3_sub := false.B
-      add4_a := add3_out; add4_b := yReg << 9; add4_sub := !subtract
+      add3_a   := xReg << 2; add3_b   := xReg; add3_sub := false.B
+      add4_a := yReg << 9; add4_b := add3_out; add4_sub := !subtract
       outY := add4_out >> 9
       add5_a   := zReg; add5_b   := rot; add5_sub := subtract
       outZ := add5_out
       resultValid := true.B
       busy := false.B
     } .elsewhen(rotIdx === 6.U) { // 6: X*6 = (x << 2) + (x << 1), Y*6 = (y << 2) + (y << 1)
-      add1_a   := xReg << 2; add1_b   := xReg << 1; add1_sub := false.B
-      add2_a := add1_out; add2_b := xReg << 9; add2_sub := subtract
+      add1_a   := yReg << 2; add1_b   := yReg << 1; add1_sub := false.B
+      add2_a := xReg << 9; add2_b := add1_out; add2_sub := subtract
       outX := add2_out >> 9
-      add3_a   := yReg << 2; add3_b   := yReg << 1; add3_sub := false.B
-      add4_a := add3_out; add4_b := yReg << 9; add4_sub := !subtract
+      add3_a   := xReg << 2; add3_b   := xReg << 1; add3_sub := false.B
+      add4_a := yReg << 9; add4_b := add3_out; add4_sub := !subtract
       outY := add4_out >> 9
       add5_a   := zReg; add5_b   := rot; add5_sub := subtract
       outZ := add5_out
       resultValid := true.B
       busy := false.B
     } .elsewhen(rotIdx === 7.U) { // 7: X*7 = (x << 3) - x + x, Y*7 = (y << 3) - y
-      add1_a   := xReg << 3; add1_b   := xReg; add1_sub := true.B
-      add2_a := add1_out; add2_b := xReg << 9; add2_sub := subtract
+      add1_a   := yReg << 3; add1_b   := yReg; add1_sub := true.B
+      add2_a := xReg << 9; add2_b := add1_out; add2_sub := subtract
       outX := add2_out >> 9
-      add3_a   := yReg << 3; add3_b   := yReg; add3_sub := true.B
-      add4_a := add3_out; add4_b := yReg << 9; add4_sub := !subtract
+      add3_a   := xReg << 3; add3_b   := xReg; add3_sub := true.B
+      add4_a := yReg << 9; add4_b := add3_out; add4_sub := !subtract
       outY := add4_out >> 9
       add5_a   := zReg; add5_b   := rot; add5_sub := subtract
       outZ := add5_out
@@ -199,11 +199,11 @@ class NanoRotations(N: Int = 16) extends Module {
       busy := false.B
     } .otherwise { // rotIdx === 8.U, 8: X*8 = x << 3, Y*8 = y << 3
       add1_a   := xReg << 9
-      add1_b   := xReg << 3
+      add1_b   := yReg << 3
       add1_sub := subtract
       outX := add1_out >> 9
       add2_a   := yReg << 9
-      add2_b   := yReg << 3
+      add2_b   := xReg << 3
       add2_sub := !subtract
       outY := add2_out >> 9
       add5_a   := zReg

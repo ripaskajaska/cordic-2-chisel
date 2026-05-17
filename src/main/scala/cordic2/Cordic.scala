@@ -97,24 +97,24 @@ class Cordic(N: Int = 16) extends Module {
       add1_a := xReg << 5
       add1_b := yReg
       add1_sub := subtract
-      xReg := add1_out
+      xReg := add1_out >> 5
 
       add2_a := yReg << 5
       add2_b := xReg
       add2_sub := !subtract
-      yReg := add2_out
+      yReg := add2_out >> 5
       calculate := false.B
       iteration := 1.U
       rotSet := false.B
     } .elsewhen(iteration === 1.U) {
       // P_1 = 64 + j
-      add1_a := (xReg >> 5) << 6
-      add1_b := (yReg >> 5)
+      add1_a := xReg << 6
+      add1_b := yReg
       add1_sub := subtract
       outX := add1_out >> 6
 
-      add2_a := (yReg >> 5) << 6
-      add2_b := (xReg >> 5)
+      add2_a := yReg << 6
+      add2_b := xReg
       add2_sub := !subtract
       outY := add2_out >> 6
       resultValid := true.B

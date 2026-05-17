@@ -28,7 +28,9 @@ class FriendAngles(N: Int = 16) extends Module {
   val outY = RegInit(0.S(N.W))
   val outZ = RegInit(0.S(N.W))
 
-  val interReg = RegInit(0.S(N.W)) // intermediate register to hold values between adder stages
+  // Wider than N bits: holds 16x+8x = 24x intermediate, which needs up to N+5 bits.
+  // Using N.W would truncate the high bits, corrupting the calcStage=1 computation.
+  val interReg = RegInit(0.S((N+5).W))
   
   // Friend angles has maximum of 5 adders used. We declare them and their I/O wires here.
   // NOTE: Adder input/output wires use width inference (SInt() not SInt(N.W)).

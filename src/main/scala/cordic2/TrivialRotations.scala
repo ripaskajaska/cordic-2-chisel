@@ -44,18 +44,18 @@ class TrivialRotations(N: Int = 16) extends Module {
   // Condition 3: main functionality — only when busy and result not yet ready
   when (busy && !resultValid) {
     when (zReg < 0.S) {
-      // Rotate clockwise
+      // Rotate counter clockwise
       when (-deg_135 <= zReg && zReg < -deg_45) {
         outX        := yReg
         outY        := -xReg
         rot         := constants.TRIVIAL_ROT(1).S
-        subtract    := true.B
+        subtract    := false.B  // z + 90°: add the rotation
         resultValid := true.B
       } .elsewhen (neg_deg_180 <= zReg && zReg < -deg_135) {
         outX        := -xReg
         outY        := -yReg
         rot         := constants.TRIVIAL_ROT(2).S
-        subtract    := true.B
+        subtract    := false.B  // z + 180°: add the rotation
         resultValid := true.B
       } .otherwise {
         // No rotation needed — skip adderSub entirely
@@ -66,18 +66,18 @@ class TrivialRotations(N: Int = 16) extends Module {
         busy        := false.B
       }
     } .otherwise {
-      // Rotate counterclockwise
+      // Rotate clockwise
       when (deg_45 < zReg && zReg <= deg_135) {
         outX        := -yReg
         outY        := xReg
         rot         := constants.TRIVIAL_ROT(1).S
-        subtract    := false.B
+        subtract    := true.B   // z - 90°: subtract the rotation
         resultValid := true.B
       } .elsewhen (deg_135 < zReg && zReg <= deg_180) {
         outX        := -xReg
         outY        := -yReg
         rot         := constants.TRIVIAL_ROT(2).S
-        subtract    := false.B
+        subtract    := true.B   // z - 180°: subtract the rotation
         resultValid := true.B
       } .otherwise {
         // No rotation needed — skip adderSub entirely

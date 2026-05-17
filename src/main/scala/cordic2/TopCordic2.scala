@@ -29,4 +29,3 @@ class TopCordic2(N: Int = 16) extends Module {
   nanoRot.input      <> cordic.output
   output             <> nanoRot.output
 }
-
