@@ -186,6 +186,24 @@ async def test_sweep_and_spectrum(dut):
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
+    # Save raw arrays so plot_interactive.py can open a zoomable window
+    np.savez(
+        os.path.join(PLOT_DIR, "analysis_data.npz"),
+        angles=angles,
+        cos_hw=cos_hw,
+        sin_hw=sin_hw,
+        ideal_cos=ideal_cos,
+        ideal_sin=ideal_sin,
+        cos_err_lsb=cos_err_lsb,
+        sin_err_lsb=sin_err_lsb,
+        freqs_centered=freqs_centered,
+        mag_full_db=mag_full_db,
+        sfdr=np.array(sfdr),
+        thd=np.array(thd),
+        N=np.array(N),
+        N_pts=np.array(N_pts),
+    )
+
     print(f"\nPlot saved → {path}")
     print(f"  max cos error = {cos_err_lsb.max():.2f} LSBs  "
           f"(at {angles[cos_err_lsb.argmax()]:.0f}°)")
