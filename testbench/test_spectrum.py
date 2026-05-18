@@ -89,7 +89,7 @@ async def test_sweep_and_spectrum(dut):
       [middle] FFT spectrum of the cosine output  (harmonic distortion)
       [right]  absolute error vs angle  (LSBs)
     """
-    cocotb.start_soon(Clock(dut.clock, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clock, 10, unit="ns").start())
     await reset_dut(dut)
 
     # Uniformly-spaced angles covering exactly one full period.

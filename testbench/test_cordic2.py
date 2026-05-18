@@ -56,7 +56,7 @@ async def test_cordic2_vs_model(dut):
     """Compare TopCordic2 hardware output against the Python model for all test angles."""
 
     # Start a 10 ns clock
-    cocotb.start_soon(Clock(dut.clock, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clock, 10, unit="ns").start())
 
     # Reset for 2 cycles
     dut.reset.value       = 1
