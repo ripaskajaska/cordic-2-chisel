@@ -29,3 +29,8 @@ class TopCordic2(N: Int = 16) extends Module {
   nanoRot.input      <> cordic.output
   output             <> nanoRot.output
 }
+
+object TopCordic2Driver extends App {
+  (new chisel3.stage.ChiselStage).emitVerilog(new TopCordic2, args)
+}
+
