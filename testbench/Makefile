@@ -18,6 +18,11 @@ TOPLEVEL_LANG   = verilog
 VERILOG_SOURCES = $(PWD)/TopCordic2.v
 
 TOPLEVEL = TopCordic2
-MODULE   = test_cordic2
+
+# Default: comparison test only.
+# Override on the command line:
+#   make MODULE=test_spectrum               # error + FFT plots only
+#   make MODULE=test_cordic2,test_spectrum  # both
+MODULE ?= test_cordic2
 
 include $(shell cocotb-config --makefiles)/Makefile.sim
