@@ -114,13 +114,20 @@ async def test_sweep_and_spectrum(dut):
     cos_err_lsb = np.abs(cos_hw - ideal_cos) * SCALE
     sin_err_lsb = np.abs(sin_hw - ideal_sin) * SCALE
 
-    # FFT of the cosine output (Hann window reduces spectral leakage)
-    window      = np.hanning(N_pts)
+    # No window: the sweep covers exactly one full period (N_pts × 360°/N_pts = 360°),
+    # so the signal sits at exactly bin 1 of the DFT. For integer-bin signals a
+    # rectangular window (ones) produces zero spectral leakage. A Hann window would
+    # introduce a deterministic −6 dB artifact at bin 2 regardless of hardware quality.
+    window      = np.ones(N_pts)
     spectrum    = np.fft.rfft(cos_hw * window)
     mag         = np.abs(spectrum)
     fundamental = mag[1]
-    mag_db      = 20.0 * np.log10(mag / fundamental + 1e-12)
-    freqs       = np.arange(len(mag))
+
+    # Two-sided shifted spectrum for display: DC at centre, fundamental at ±1
+    spectrum_full   = np.fft.fftshift(np.fft.fft(cos_hw * window))
+    mag_full        = np.abs(spectrum_full)
+    mag_full_db     = 20.0 * np.log10(mag_full / fundamental + 1e-12)
+    freqs_centered  = np.arange(-N_pts // 2, N_pts - N_pts // 2)   # −N/2 … +N/2−1
 
     harmonics = mag[2 : N_pts // 2]
     sfdr = -20.0 * np.log10(harmonics.max()                 / fundamental + 1e-12)
@@ -144,20 +151,19 @@ async def test_sweep_and_spectrum(dut):
     axes[0].legend(fontsize=8)
     axes[0].grid(True, alpha=0.3)
 
-    # --- Middle: FFT spectrum ---
-    # Use a line plot at high N_pts — stem becomes unreadable above ~100 bins
+    # --- Middle: FFT spectrum (two-sided, centred on DC; fundamental at bins ±1) ---
     if N_pts <= 128:
-        axes[1].stem(freqs, mag_db, markerfmt="C0o", linefmt="C0-", basefmt="grey")
+        axes[1].stem(freqs_centered, mag_full_db, markerfmt="C0o", linefmt="C0-", basefmt="grey")
     else:
-        axes[1].plot(freqs, mag_db, linewidth=0.8, color="C0")
-        axes[1].fill_between(freqs, mag_db, -100, alpha=0.15, color="C0")
+        axes[1].plot(freqs_centered, mag_full_db, linewidth=0.8, color="C0")
+        axes[1].fill_between(freqs_centered, mag_full_db, -100, alpha=0.15, color="C0")
     axes[1].axhline(-60, color="red", linestyle="--", linewidth=0.8, label="-60 dB")
-    axes[1].set_xlim(-0.5, N_pts // 2 + 0.5)
+    axes[1].set_xlim(-N_pts // 2, N_pts // 2)
     axes[1].set_ylim(-100, 5)
-    axes[1].set_xlabel("Frequency bin  (bin 1 = fundamental)")
+    axes[1].set_xlabel("Frequency bin  (0 = DC, ±1 = fundamental)")
     axes[1].set_ylabel("Magnitude (dBFS re fundamental)")
     axes[1].set_title(
-        f"FFT spectrum  (Hann, N={N_pts})\nSFDR={sfdr:.1f} dB   THD={thd:.1f} dB"
+        f"FFT spectrum  (rectangular, N={N_pts})\nSFDR={sfdr:.1f} dB   THD={thd:.1f} dB"
     )
     axes[1].legend(fontsize=8)
     axes[1].grid(True, alpha=0.3)
